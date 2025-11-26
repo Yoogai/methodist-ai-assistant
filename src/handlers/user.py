@@ -6,7 +6,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, FSInputFile
 from html import escape
 
-# Импортируем сервисы, клавиатуры и конфиги
 from src.services.rag_engine import RagEngine
 from src.services.yandex_gpt import YandexGPTService
 from src.services.database import db
@@ -18,19 +17,42 @@ router = Router()
 rag_service = RagEngine()
 gpt_service = YandexGPTService()
 
-# Системный промпт
-SYSTEM_PROMPT = """Ты — «Методист НБ РА», ведущий эксперт-консультант. Ты НЕ пересказываешь документы, а отвечаешь на вопрос пользователя по существу, используя факты из предоставленного контекста как основу для своего ответа.
+# 1. ОСНОВНОЙ ПРОМПТ
+SYSTEM_PROMPT = """Ты — «Цифровой помощник НМО НБ РА», ведущий методист-консультант. 
+Твоя задача — отвечать на вопросы сотрудников библиотек, используя факты из предоставленного контекста.
 
 ИНСТРУКЦИИ:
-1.  **Говори от первого лица эксперта:** Используй фразы "Вам следует...", "Правила таковы:", "Рекомендуется...".
-2.  **Забудь о документе:** НЕ упоминай фразы "в данном пособии говорится", "цель документа", "в тексте сказано". Просто давай ответ.
-3.  **Будь конкретным:** Отвечай на вопрос пользователя, а не описывай, что есть в документе.
-4.  **Основа — контекст:** Весь твой ответ должен быть СТРОГО основан на фактах из предоставленного контекста. Если в контексте нет ответа, напиши: "В моей базе знаний нет информации по этому вопросу".
-5.  **Структурируй:** Используй списки и выделение для улучшения читаемости.
+1. Основа — контекст: Весь твой ответ должен быть СТРОГО основан на фактах из контекста.
+2. Стиль: официально-деловой, но доброжелательный.
+3. Структурируй ответ (списки, абзацы).
+"""
+
+# 2. SMALL TALK
+CHIT_CHAT_PROMPT = """Ты — «Цифровой помощник НМО НБ РА», вежливый, эмпатичный, интеллектуальный.
+Пользователь написал сообщение, но прямой ответ в базе знаний не найден.
+
+ТВОЯ ЗАДАЧА:
+1. **Если это приветствие** -> Поздоровайся тепло, представься и предложи помощь.
+2. **Если пользователь спрашивает "Что ты умеешь?", "О чем рассказать?", "Твои темы"** ->
+   Ответь: "Я изучил методические материалы Национальной библиотеки и готов проконсультировать вас по следующим темам:"
+   Затем перечисли список (используй красивые буллиты):
+   * 📚 Комплектование и учёт библиотечных фондов (включая списание).
+   * 📝 Оформление методических пособий и изданий (структура, ГОСТы).
+   * 📊 Статистический учёт (форма 6-НК, основные показатели).
+   * 🏛 Работа научно-методического отдела Национальной библиотеки РА.
+   * 📰 Библиографические обзоры и списки литературы.
+
+   Закончи фразой: "Просто задайте вопрос в свободной форме."
+
+3. **Если это благодарность** -> Ответь: "Всегда пожалуйста! Рад быть полезным."
+4. **Если вопрос не по теме** -> Вежливо скажи: "К сожалению, пока я не владею информацией по этому вопросу. Но я быстро учусь! Попробуйте спросить что-нибудь другое."
+
+ВАЖНО: Будь живым собеседником, избегай канцелярщины.
 """
 
 
-# --- FSM Состояния (для режима "Задать вопрос") ---
+# ...
+
 class QuestionStates(StatesGroup):
     waiting_for_question = State()
 
@@ -39,10 +61,6 @@ class QuestionStates(StatesGroup):
 
 @router.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
-    """
-    /start: Приветствие, сохранение пользователя в БД, выдача меню.
-    """
-    # Сохраняем пользователя для рассылок
     db.add_user(
         user_id=message.from_user.id,
         username=message.from_user.username,
@@ -55,15 +73,12 @@ async def command_start_handler(message: Message) -> None:
         parse_mode="HTML"
     )
     await message.answer(
-        "Я — ваш цифровой помощник-методист. Задайте мне вопрос по библиотечному делу или выберите опцию в меню."
+        "Я — ваш цифровой помощник-методист. Задайте мне вопрос по библиотечному делу."
     )
 
 
 @router.message(F.text == "✍️ Задать вопрос")
 async def ask_question_handler(message: Message, state: FSMContext) -> None:
-    """
-    Вход в режим вопроса администратору.
-    """
     await state.set_state(QuestionStates.waiting_for_question)
     await message.answer(
         "Напишите ваш вопрос, и я перешлю его главному методисту. "
@@ -73,10 +88,6 @@ async def ask_question_handler(message: Message, state: FSMContext) -> None:
 
 @router.message(StateFilter(QuestionStates.waiting_for_question), F.text)
 async def forward_question_handler(message: Message, bot: Bot, state: FSMContext) -> None:
-    """
-    Обработка вопроса: пересылка администратору.
-    """
-    # Формируем карточку пользователя (ИСПРАВЛЕНО: теперь тут реальные данные)
     username = f"@{message.from_user.username}" if message.from_user.username else "нет"
     user_info = (
         f"❓ <b>Новый вопрос от пользователя:</b>\n"
@@ -86,69 +97,56 @@ async def forward_question_handler(message: Message, bot: Bot, state: FSMContext
     )
 
     try:
-        # 1. Отправляем админу данные о пользователе
         await bot.send_message(ADMIN_ID, user_info, parse_mode="HTML")
-
-        # 2. Пересылаем сообщение (чтобы админ мог сделать Reply)
         await bot.forward_message(
             chat_id=ADMIN_ID,
             from_chat_id=message.chat.id,
             message_id=message.message_id
         )
-
-        # 3. Говорим пользователю, что все ок
         await message.answer(
             "✅ Спасибо! Ваш вопрос отправлен. Вам ответят в ближайшее время.",
             reply_markup=get_main_menu_keyboard()
         )
     except Exception as e:
-        await message.answer(f"Произошла ошибка при отправке вопроса: {e}. Попробуйте позже.")
+        await message.answer(f"Произошла ошибка: {e}")
 
-    # Выходим из режима ожидания
     await state.clear()
 
 
 @router.message(F.text, StateFilter(None), F.reply_to_message == None)
 async def handle_text_query(message: Message, bot: Bot) -> None:
-    """
-    Основная логика RAG (Поиск по базе знаний).
-    Срабатывает только если нет активного State и это не ответ на сообщение.
-    """
     await bot.send_chat_action(chat_id=message.chat.id, action='typing')
 
     # 1. Поиск в базе
     context, metadata = rag_service.search(message.text)
 
-    # Если ничего не нашли — сразу выходим
+    # --- ЕСЛИ НИЧЕГО НЕ НАШЛИ В БАЗЕ ---
     if not context or not metadata:
-        await message.answer(
-            "😕 К сожалению, я не нашел точного ответа в загруженных документах.\n\n"
-            "Попробуйте переформулировать вопрос или воспользуйтесь кнопкой '✍️ Задать вопрос', чтобы связаться с методистом."
+        chit_chat_response = gpt_service.generate_response(
+            system_prompt=CHIT_CHAT_PROMPT,  # <-- Другая роль
+            user_text=message.text,
+            context_text=""  # Контекста нет
         )
+        await message.answer(escape(chit_chat_response), parse_mode="HTML")
         return
 
-    # 2. Генерация ответа через YandexGPT
+    # --- ЕСЛИ НАШЛИ ДОКУМЕНТ ---
     ai_response = gpt_service.generate_response(
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT,  # <-- Роль строгого эксперта
         user_text=message.text,
         context_text=context
     )
 
-    # Если нейросеть вернула ошибку или отказ
+    # Обработка отказов
     if "Извините" in ai_response or "ошибка" in ai_response or "нет информации" in ai_response:
+        # Если даже с контекстом модель отказалась отвечать, пробуем мягкий ответ
         await message.answer(escape(ai_response), parse_mode="HTML")
         return
 
-    # 3. Формирование ответа с источником
     pdf_slug = metadata.get('slug')
     biblio_ref = metadata.get('biblio_ref', 'Источник не указан.')
 
-    safe_ai_response = escape(ai_response)
-    safe_biblio_ref = escape(biblio_ref)
-
-    final_response_text = f"{safe_ai_response}\n\n---\n<i>📚 Источник: {safe_biblio_ref}</i>"
-
-    # Кнопка скачивания (по slug)
+    final_response_text = f"{escape(ai_response)}\n\n---\n<i>📚 Источник: {escape(biblio_ref)}</i>"
     keyboard = create_pdf_keyboard(pdf_slug)
 
     await message.answer(
@@ -160,14 +158,11 @@ async def handle_text_query(message: Message, bot: Bot) -> None:
 
 @router.callback_query(F.data.startswith("get_pdf:"))
 async def send_pdf_handler(callback: CallbackQuery, bot: Bot) -> None:
-    """
-    Отправка PDF файла по нажатию кнопки.
-    """
     slug = callback.data.split(":")[1]
     filename = rag_service.get_filename_by_slug(slug)
 
     if not filename:
-        await callback.message.answer("Ошибка: файл не найден в индексе бота.")
+        await callback.message.answer("Ошибка: файл не найден.")
         await callback.answer()
         return
 
@@ -177,15 +172,10 @@ async def send_pdf_handler(callback: CallbackQuery, bot: Bot) -> None:
         await bot.send_chat_action(chat_id=callback.message.chat.id, action='upload_document')
         document = FSInputFile(file_path)
         try:
-            await callback.message.answer_document(
-                document,
-                caption=f"Ваш документ: {escape(filename)}"
-            )
+            await callback.message.answer_document(document, caption=f"Ваш документ: {escape(filename)}")
         except Exception as e:
-            await callback.message.answer(f"Не удалось отправить файл: {e}")
+            await callback.message.answer(f"Ошибка отправки: {e}")
     else:
-        await callback.message.answer(
-            f"Критическая ошибка: файл <code>{escape(filename)}</code> физически отсутствует на сервере.",
-            parse_mode="HTML")
+        await callback.message.answer("Файл не найден.", parse_mode="HTML")
 
     await callback.answer()
