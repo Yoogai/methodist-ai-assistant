@@ -1,0 +1,22 @@
+# Секреты
+.env
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Файлы IDE
+.idea/
+.vscode/
+
+# Кэш Python
+__pycache__/
+*.pyc
+
+# База данных
+bot_users.db
+*.db-journal*
+
+# PDF файлы (хранятся только на ВМ)
+data/pdf/
