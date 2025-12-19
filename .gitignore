@@ -1,0 +1,9 @@
+# Исключения безопасности и кэша
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+bot_users.db
+*.log
