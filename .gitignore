@@ -7,3 +7,6 @@ __pycache__/
 *.sqlite3
 bot_users.db
 *.log
+# SSH ключи деплоя
+github_deploy_key.pub
+github_deploy_key

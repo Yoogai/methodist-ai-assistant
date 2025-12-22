@@ -1,0 +1,35 @@
+name: Deploy Methodist Bot
+
+on:
+  push:
+    branches:
+      - main  # Сценарий срабатывает при пуше в ветку main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Executing remote ssh commands to deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Переходим в директорию проекта
+            cd /opt/methodist-ai-assistant
+            
+            # Принудительно обновляем код из GitHub
+            sudo git fetch --all
+            sudo git reset --hard origin/main
+            
+            # Обновляем зависимости в виртуальном окружении
+            source .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            
+            # Перезапускаем службу бота
+            sudo systemctl restart methodist-bot
