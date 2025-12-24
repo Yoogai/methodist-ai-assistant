@@ -132,7 +132,7 @@ async def handle_voice_message(message: Message, bot: Bot, state: FSMContext):
         await status_msg.edit_text("Ошибка голоса.")
 
 
-@router.message(F.text, StateFilter(None, DialogStates.main, DialogStates.recognition_mode))
+@router.message(F.text, StateFilter(None, DialogStates.main))
 async def handle_text_query(message: Message, bot: Bot, state: FSMContext):
     if message.text in ["✍️ Написать нам", "🌐 Поиск в сети", "⚙️ Параметры", "💡 Есть идея",
                         "✨ Креативный режим"]: return

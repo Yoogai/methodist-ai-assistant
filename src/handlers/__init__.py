@@ -8,12 +8,18 @@ from .admin import router as admin_router
 
 def get_user_router() -> Router:
     main_router = Router()
-    # Порядок ВАЖЕН: сначала специфичные, потом общие
+
+    # ПОРЯДОК КРИТИЧЕСКИ ВАЖЕН:
+    # Сначала проверяем системные настройки и параметры
     main_router.include_router(settings_router)
-    main_router.include_router(recognition_router)
+    # Затем специфические режимы с FSM (Креатив и Распознавание)
     main_router.include_router(creative_router)
+    main_router.include_router(recognition_router)
+    # Затем обратную связь
     main_router.include_router(feedback_router)
+    # И только в самом конце — базовый роутер (RAG и Small Talk)
     main_router.include_router(base_router)
+
     return main_router
 
 def get_admin_router() -> Router:
